@@ -11,7 +11,7 @@ Add the flake input and import the module:
 ```nix
 # flake.nix
 {
-  inputs.wallpaper-rotation.url = "https://flakehub.com/f/htelsiz/nix-wallpaper-rotation/*.tar.gz";
+  inputs.wallpaper-rotation.url = "https://flakehub.com/f/htelsiz/nix-wallpaper-rotation/*";
 
   outputs = { self, nixpkgs, home-manager, wallpaper-rotation, ... }: {
     # In your Home Manager config:
