@@ -27,33 +27,26 @@ let
 
   wallDir = "$HOME/.local/share/wallpapers";
 
-  findImages = ''
-    ${pkgs.findutils}/bin/find -L "${wallDir}" -type f \
-      \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.webp' \) \
-      2>/dev/null
-  '';
+  darwinScript = lib.getExe (pkgs.writeShellApplication {
+    name = "wallpaper-rotate";
+    runtimeInputs = with pkgs; [ findutils coreutils ];
+    text = ''
+      [ -d "${wallDir}" ] || exit 0
+      wall=$(find -L "${wallDir}" -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) | shuf -n1)
+      [ -n "$wall" ] || exit 0
+      /usr/bin/osascript -e "tell application \"System Events\" to set picture of every desktop to \"$wall\""
+    '';
+  });
 
-  darwinScript = pkgs.writeShellScript "wallpaper-rotate" ''
-    if [ -d "${wallDir}" ]; then
-      WALL=$(${findImages} | ${pkgs.gawk}/bin/awk -v seed="$RANDOM" 'BEGIN{srand(seed)} {if(rand()*NR<1)x=$0} END{print x}')
-      if [ -n "$WALL" ]; then
-        /usr/bin/osascript -e "
-          tell application \"System Events\"
-            tell every desktop
-              set picture to \"$WALL\"
-            end tell
-          end tell
-        " 2>/dev/null || true
-      fi
-    fi
-  '';
-
-  linuxScript = pkgs.writeShellScript "wallpaper-rotate" ''
-    WALL=$(${findImages} | ${pkgs.coreutils}/bin/shuf -n1)
-    if [ -n "$WALL" ]; then
-      plasma-apply-wallpaperimage "$WALL" 2>/dev/null || true
-    fi
-  '';
+  linuxScript = lib.getExe (pkgs.writeShellApplication {
+    name = "wallpaper-rotate";
+    runtimeInputs = with pkgs; [ findutils coreutils ];
+    text = ''
+      wall=$(find -L "${wallDir}" -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) | shuf -n1)
+      [ -n "$wall" ] || exit 0
+      plasma-apply-wallpaperimage "$wall" 2>/dev/null || true
+    '';
+  });
 in
 {
   options.services.wallpaper-rotation = {
@@ -83,7 +76,7 @@ in
     launchd.agents.wallpaper-rotation = lib.mkIf isDarwin {
       enable = true;
       config = {
-        ProgramArguments = [ "${darwinScript}" ];
+        ProgramArguments = [ darwinScript ];
         RunAtLoad = true;
         StartInterval = cfg.interval;
       };
@@ -97,7 +90,7 @@ in
       };
       Service = {
         Type = "oneshot";
-        ExecStart = "${linuxScript}";
+        ExecStart = linuxScript;
       };
     };
 
