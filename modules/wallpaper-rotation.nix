@@ -3,8 +3,13 @@
 # =============================================================================
 # Cross-platform random wallpaper rotation with configurable collections.
 #
-#   macOS:  launchd agent using osascript
-#   NixOS:  systemd user timer using plasma-apply-wallpaperimage (KDE)
+#   macOS:    launchd agent using osascript
+#   KDE:      plasma-apply-wallpaperimage
+#   Noctalia: noctalia-shell IPC (niri/Quickshell-based)
+#   GNOME:    gsettings
+#   Sway:     swaymsg output * bg <path> fill
+#   Hyprland: hyprctl hyprpaper wallpaper
+#   Generic:  swaybg / feh fallback
 #
 # Usage in your flake:
 #   imports = [ nix-wallpaper-rotation.homeManagerModules.default ];
@@ -44,7 +49,58 @@ let
     text = ''
       wall=$(find -L "${wallDir}" -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) | shuf -n1)
       [ -n "$wall" ] || exit 0
-      plasma-apply-wallpaperimage "$wall" 2>/dev/null || true
+
+      desktop="''${XDG_CURRENT_DESKTOP:-}"
+
+      # KDE Plasma
+      if [ "$desktop" = "KDE" ] && command -v plasma-apply-wallpaperimage &>/dev/null; then
+        plasma-apply-wallpaperimage "$wall" 2>/dev/null
+        exit 0
+      fi
+
+      # Noctalia Shell (niri / Quickshell-based Wayland shell)
+      if command -v noctalia-shell &>/dev/null && pgrep -x quickshell &>/dev/null; then
+        noctalia-shell ipc call wallpaper set "$wall" ""
+        exit 0
+      fi
+
+      # GNOME
+      if [ "$desktop" = "GNOME" ] && command -v gsettings &>/dev/null; then
+        gsettings set org.gnome.desktop.background picture-uri "file://$wall"
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall"
+        exit 0
+      fi
+
+      # Sway
+      if [ "$desktop" = "sway" ] || [ "''${SWAYSOCK:-}" != "" ]; then
+        if command -v swaymsg &>/dev/null; then
+          swaymsg output '*' bg "$wall" fill
+          exit 0
+        fi
+      fi
+
+      # Hyprland
+      if [ "$desktop" = "Hyprland" ] && command -v hyprctl &>/dev/null; then
+        hyprctl hyprpaper wallpaper ",$wall"
+        exit 0
+      fi
+
+      # Fallback: swaybg (kills previous instance, starts new one)
+      if command -v swaybg &>/dev/null; then
+        pkill swaybg 2>/dev/null || true
+        swaybg -i "$wall" -m fill &
+        disown
+        exit 0
+      fi
+
+      # Fallback: feh (X11)
+      if command -v feh &>/dev/null; then
+        feh --bg-fill "$wall"
+        exit 0
+      fi
+
+      echo "wallpaper-rotate: no supported wallpaper setter found" >&2
+      exit 1
     '';
   });
 in
